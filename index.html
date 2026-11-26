@@ -272,6 +272,7 @@ if(CFG.url&&!SB){document.body.innerHTML="<p style=\"padding:24px\">Could not lo
 var db=load();
 ["notes","timetable","learning","library","leave","meetings","fees","sms"].forEach(function(k){db[k]=db[k]||[]});
 if(!db.leave.length)db.leave=[{id:1,name:"Annual Leave",days:"15"},{id:2,name:"Sick Leave",days:"10"}];
+migrateYears();
 function load(){try{var r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){}return JSON.parse(JSON.stringify(seed))}
 function save(){try{if(!SB)localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}
 if(SB&&SID){clearTimeout(tm);tm=setTimeout(function(){SB.from("school_data").upsert(Object.keys(db).map(function(k){return{school_id:SID,key:k,value:db[k]}})).then(function(r){if(r.error)toast("Could not save to server")})},500)}}
@@ -324,7 +325,8 @@ var MSUB=["Mathematics","English","Science","Computing","Social Studies","R.M.E.
 function markPicker(title,withSubject){
 var CL=[],i;for(i=1;i<=9;i++)CL.push("Basic "+i);
 function o(a){return a.map(function(x){return'<option>'+x+'</option>'}).join("")}
-view.innerHTML=card(title,'<div class="toolbar"><select id="mc" aria-label="Class">'+o(CL)+'</select><select id="mt" aria-label="Term">'+o(["Term 1","Term 2","Term 3"])+'</select><select id="me" aria-label="Exam type">'+o(["Monthly Test 1","Monthly Test 2","Mid-term","Exams"])+'</select>'+(withSubject?'<select id="ms" aria-label="Subject">'+o(MSUB)+'</select>':'')+'</div><div id="mb"></div>');
+var cy=acadYear(new Date());
+view.innerHTML=card(title,'<div class="toolbar"><select id="my" aria-label="Academic year">'+acadYears().map(function(y){return'<option'+(y===cy?' selected':'')+'>'+y+'</option>'}).join("")+'</select><select id="mc" aria-label="Class">'+o(CL)+'</select><select id="mt" aria-label="Term">'+o(["Term 1","Term 2","Term 3"])+'</select><select id="me" aria-label="Exam type">'+o(["Monthly Test 1","Monthly Test 2","Mid-term","Exams"])+'</select>'+(withSubject?'<select id="ms" aria-label="Subject">'+o(MSUB)+'</select>':'')+'</div><div id="mb"></div>');
 }
 var PF=[["Full Name","name"],["Employee ID","empId"],["Department","dept"],["Position","position"],["Category","category"],["Gender","gender"],["Date of Birth","dob"],["Date of Employment","doe"],["Supervisor","supervisor"],["Qualification","qual"],["Nationality","nation"],["Mobile No.","mobile"],["Email","email"],["Address","address"],["Emergency Contact","emergency"]];
 function empForm(e){
@@ -365,6 +367,9 @@ r.onload=function(){var im=new Image();im.onload=function(){var W=180,H=240,c=do
 var s=Math.max(W/im.width,H/im.height),w=im.width*s,hh=im.height*s;c.getContext("2d").drawImage(im,(W-w)/2,(H-hh)/2,w,hh);
 var d=c.toDataURL("image/jpeg",.75);hid.value=d;box.innerHTML='<img alt="" src="'+d+'">'};
 im.onerror=function(){toast("Could not read that image")};im.src=r.result};r.readAsDataURL(f)}})}
+function acadYear(d,off){var y=d.getFullYear(),s=(d.getMonth()>=8?y:y-1)+(off||0);return s+"/"+(s+1)}
+function acadYears(){var a=[];for(var i=-2;i<=1;i++)a.push(acadYear(new Date(),i));return a}
+function migrateYears(){["marks2","absent"].forEach(function(k){var o=db[k];if(!o)return;Object.keys(o).forEach(function(key){if(key.split("|").length===4){o["2025/2026|"+key]=o[key];delete o[key]}})})}
 function nextId(a){return a.reduce(function(m,x){return Math.max(m,x.id)},0)+1}
 function go(p,title){applyST();
 var f=pages[p]||pages.soon;view.innerHTML="";f(title);window.scrollTo(0,0)}
@@ -380,7 +385,7 @@ var classes=new Set(db.students.map(function(s){return s.cls})).size;
 var g=new Set(db.students.map(function(s){return s.guardian})).size;
 function st(l,n){return '<div class="stat"><span>'+l+'</span><b>'+n+'</b></div>'}
 view.innerHTML='<div class="grid">'+
-card("School Summary Info",st("Active Classes",classes)+st("Students",db.students.length)+st("Parents",g)+st("Employees",db.employees.length))+
+card("School Summary Info",st("Academic Year",acadYear(new Date()))+st("Active Classes",classes)+st("Students",db.students.length)+st("Parents",g)+st("Employees",db.employees.length))+
 card("Employee Attendance",'<table><thead><tr><th>Department</th><th>S</th><th>Pr</th><th>Ab</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Summary</td><td>'+T[0]+'</td><td>'+T[1]+'</td><td>'+T[2]+'</td></tr></tfoot></table><p class="note">S - Employees, Pr - Present, Ab - Absent</p>')+'</div>'},
 students:function(){crud("Manage Students","students",[["photo","Passport photo","photo"],["name","Full name"],["cls","Class",["Basic 1","Basic 2","Basic 3","Basic 4","Basic 5","Basic 6","Basic 7","Basic 8","Basic 9"]],["guardian","Guardian"],["phone","Phone"],["gphoto","Guardian photo","photo"]])},
 admit:function(){empForm()},
@@ -434,7 +439,7 @@ var e=db.employees.find(function(x){return x.id==b.parentNode.dataset.id});e.sta
 marks:function(){
 var P=markPicker("Enter Marks",true);
 function draw(){
-var c=$("#mc").value,t=$("#mt").value,e=$("#me").value,s=$("#ms").value,key=[c,t,e,s].join("|");
+var y=$("#my").value,c=$("#mc").value,t=$("#mt").value,e=$("#me").value,s=$("#ms").value,key=[y,c,t,e,s].join("|");
 db.marks2=db.marks2||{};db.absent=db.absent||{};var cur=db.marks2[key]||{},ab=db.absent[key]||{};
 var l=db.students.filter(function(x){return x.cls===c}),b=$("#mb");
 if(!l.length){b.innerHTML='<div class="empty">No students in '+c+'. Add students under Manage Students first.</div>';return}
@@ -443,22 +448,22 @@ l.forEach(function(x){h+='<tr><td>'+esc(x.name)+'</td><td><input type="number" m
 b.innerHTML=h+'</tbody></table><p><button class="btn" id="sv">Save marks</button></p>';
 b.querySelectorAll("input[data-a]").forEach(function(c){c.onchange=function(){var i=b.querySelector('input[data-id="'+c.dataset.a+'"]');i.disabled=c.checked;if(c.checked)i.value=""}});
 $("#sv").onclick=function(){var o=db.marks2[key]=db.marks2[key]||{};
-var oa=db.absent[key]=db.absent[key]||{};b.querySelectorAll("input[data-id]").forEach(function(i){var id=i.dataset.id,c=b.querySelector('input[data-a="'+id+'"]');if(c.checked){oa[id]=true;delete o[id]}else{delete oa[id];if(i.value==="")delete o[id];else o[id]=Math.max(0,Math.min(100,+i.value))}});save();toast("Marks saved for "+c+", "+t+", "+e)}}
-["mc","mt","me","ms"].forEach(function(i){$("#"+i).onchange=draw});draw()},
+var oa=db.absent[key]=db.absent[key]||{};b.querySelectorAll("input[data-id]").forEach(function(i){var id=i.dataset.id,c=b.querySelector('input[data-a="'+id+'"]');if(c.checked){oa[id]=true;delete o[id]}else{delete oa[id];if(i.value==="")delete o[id];else o[id]=Math.max(0,Math.min(100,+i.value))}});save();toast("Marks saved for "+c+", "+t+", "+e+" ("+y+")")}}
+["my","mc","mt","me","ms"].forEach(function(i){$("#"+i).onchange=draw});draw()},
 reports:function(){
 markPicker("Assessment Reports",false);
 function gr(n){return n>=80?"A":n>=70?"B":n>=60?"C":n>=50?"D":"F"}
 function draw(){
-var c=$("#mc").value,t=$("#mt").value,e=$("#me").value,b=$("#mb");db.marks2=db.marks2||{};
+var y=$("#my").value,c=$("#mc").value,t=$("#mt").value,e=$("#me").value,b=$("#mb");db.marks2=db.marks2||{};
 var l=db.students.filter(function(x){return x.cls===c});
 if(!l.length){b.innerHTML='<div class="empty">No students in '+c+'.</div>';return}
 var S=MSUB;var h='<table><thead><tr><th>Student</th>'+S.map(function(x){return'<th>'+x+'</th>'}).join("")+'<th>Average</th><th>Grade</th></tr></thead><tbody>';
 l.forEach(function(x){var v=[];h+='<tr><td>'+esc(x.name)+'</td>';
-S.forEach(function(s){var k=[c,t,e,s].join("|"),m=(db.marks2[k]||{})[x.id],a=((db.absent||{})[k]||{})[x.id];if(m!=null)v.push(m);h+='<td>'+(a?"Abs":m==null?"-":m)+'</td>'});
+S.forEach(function(s){var k=[y,c,t,e,s].join("|"),m=(db.marks2[k]||{})[x.id],a=((db.absent||{})[k]||{})[x.id];if(m!=null)v.push(m);h+='<td>'+(a?"Abs":m==null?"-":m)+'</td>'});
 var a=v.length?Math.round(v.reduce(function(p,q){return p+q},0)/v.length):null;
 h+='<td>'+(a==null?"-":a)+'</td><td>'+(a==null?"-":gr(a))+'</td></tr>'});
 b.innerHTML=h+'</tbody></table>'}
-["mc","mt","me"].forEach(function(i){$("#"+i).onchange=draw});draw()},
+["my","mc","mt","me"].forEach(function(i){$("#"+i).onchange=draw});draw()},
 marksOld:function(){
 var h='<div class="toolbar"><select id="subj"><option>Mathematics</option><option>English</option><option>Science</option></select></div><table><thead><tr><th>Student</th><th>Class</th><th>Mark (0-100)</th></tr></thead><tbody>';
 db.students.forEach(function(s){h+='<tr><td>'+esc(s.name)+'</td><td>'+esc(s.cls)+'</td><td><input type="number" min="0" max="100" data-id="'+s.id+'" style="width:90px"></td></tr>'});
@@ -527,7 +532,7 @@ if(!p.data){$("#er").textContent=p.error?"Database error: "+p.error.message+".":
 SID=p.data.school_id;
 SB.from("school_data").select("key,value").then(function(r){
 db={students:[],employees:[],marks:{},marks2:{},notes:[],timetable:[],learning:[],library:[],leave:[{id:1,name:"Annual Leave",days:"15"},{id:2,name:"Sick Leave",days:"10"}],meetings:[],fees:[],sms:[]};
-(r.data||[]).forEach(function(x){db[x.key]=x.value});$("#lp").value="";setAuth(true);show()})})}
+(r.data||[]).forEach(function(x){db[x.key]=x.value});migrateYears();$("#lp").value="";setAuth(true);show()})})}
 $("#out").onclick=function(){if(SB)SB.auth.signOut();setAuth(false);show()};
 $("#fg").onclick=function(){toast("Contact your school administrator to reset your password.")};
 var SBX=typeof SB==="undefined"?null:SB,CFX=typeof CFG==="undefined"?{}:CFG;
